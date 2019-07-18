@@ -40,6 +40,8 @@ namespace Ignitor
 
         private CancellableOperation NextBatchReceived { get; set; }
 
+        private CancellableOperation NextErrorReceived { get; set; }
+
         private CancellableOperation NextJSInteropReceived { get; set; }
 
         public bool ConfirmRenderBatch { get; set; } = true;
@@ -48,7 +50,7 @@ namespace Ignitor
 
         public event Action<int, int, byte[]> RenderBatchReceived;
 
-        public event Action<Error> OnCircuitError;
+        public event Action<string> OnCircuitError;
 
         public string CircuitId { get; set; }
 
@@ -80,6 +82,18 @@ namespace Ignitor
             NextJSInteropReceived = new CancellableOperation(DefaultLatencyTimeout);
 
             return NextJSInteropReceived.Completion.Task;
+        }
+
+        public Task PrepareForNextCircuitError()
+        {
+            if (NextErrorReceived?.Completion != null)
+            {
+                throw new InvalidOperationException("Invalid state previous task not completed");
+            }
+
+            NextErrorReceived = new CancellableOperation(DefaultLatencyTimeout);
+
+            return NextErrorReceived.Completion.Task;
         }
 
         public async Task ClickAsync(string elementId)
@@ -116,6 +130,13 @@ namespace Ignitor
             await task;
         }
 
+        public async Task ExpectCircuitError(Func<Task> action)
+        {
+            var task = WaitForCircuitError();
+            await action();
+            await task;
+        }
+
         private Task WaitForRenderBatch(TimeSpan? timeout = null)
         {
             if (ImplicitWait)
@@ -144,7 +165,20 @@ namespace Ignitor
             }
         }
 
-        public async Task<bool> ConnectAsync(Uri uri, bool prerendered)
+        private async Task WaitForCircuitError()
+        {
+            if (ImplicitWait)
+            {
+                if (DefaultLatencyTimeout == null)
+                {
+                    throw new InvalidOperationException("Implicit wait without DefaultLatencyTimeout is not allowed.");
+                }
+
+                await PrepareForNextCircuitError();
+            }
+        }
+
+        public async Task<bool> ConnectAsync(Uri uri, bool prerendered, bool connectAutomatically = true)
         {
             var builder = new HubConnectionBuilder();
             builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHubProtocol, IgnitorMessagePackHubProtocol>());
@@ -156,8 +190,13 @@ namespace Ignitor
 
             HubConnection.On<int, string, string>("JS.BeginInvokeJS", OnBeginInvokeJS);
             HubConnection.On<int, int, byte[]>("JS.RenderBatch", OnRenderBatch);
-            HubConnection.On<Error>("JS.OnError", OnError);
+            HubConnection.On<string>("JS.Error", OnError);
             HubConnection.Closed += OnClosedAsync;
+
+            if (!connectAutomatically)
+            {
+                return true;
+            }
 
             // Now everything is registered so we can start the circuit.
             if (prerendered)
@@ -213,9 +252,18 @@ namespace Ignitor
             }
         }
 
-        private void OnError(Error error)
+        private void OnError(string error)
         {
-            OnCircuitError?.Invoke(error);
+            try
+            {
+                OnCircuitError?.Invoke(error);
+
+                NextErrorReceived?.Completion?.TrySetResult(null);
+            }
+            catch (Exception e)
+            {
+                NextErrorReceived?.Completion?.TrySetResult(e);
+            }
         }
 
         private Task OnClosedAsync(Exception ex)
