@@ -75,6 +75,9 @@ namespace Microsoft.AspNetCore.Http.Connections.Internal.Transports
 
             if (trigger == receiving)
             {
+                // Observe exception if there is one to avoid unobserved tasks
+                _ = receiving.Exception;
+
                 Log.WaitingForSend(_logger);
 
                 // We're waiting for the application to finish and there are 2 things it could be doing
@@ -100,12 +103,18 @@ namespace Microsoft.AspNetCore.Http.Connections.Internal.Transports
                     }
                     else
                     {
+                        // Observe exception if there is one to avoid unobserved tasks
+                        _ = sending.Exception;
+
                         delayCts.Cancel();
                     }
                 }
             }
             else
             {
+                // Observe exception if there is one to avoid unobserved tasks
+                _ = sending.Exception;
+
                 Log.WaitingForClose(_logger);
 
                 // We're waiting on the websocket to close and there are 2 things it could be doing
@@ -128,6 +137,9 @@ namespace Microsoft.AspNetCore.Http.Connections.Internal.Transports
                     }
                     else
                     {
+                        // Observe exception if there is one to avoid unobserved tasks
+                        _ = receiving.Exception;
+
                         delayCts.Cancel();
                     }
                 }
@@ -187,10 +199,6 @@ namespace Microsoft.AspNetCore.Http.Connections.Internal.Transports
                 if (!_aborted && !token.IsCancellationRequested)
                 {
                     _application.Output.Complete(ex);
-
-                    // We re-throw here so we can communicate that there was an error when sending
-                    // the close frame
-                    throw;
                 }
             }
             finally
