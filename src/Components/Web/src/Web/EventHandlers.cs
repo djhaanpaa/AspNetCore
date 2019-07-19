@@ -3,7 +3,7 @@
 
 using System;
 
-namespace Microsoft.AspNetCore.Components
+namespace Microsoft.AspNetCore.Components.Web
 {
     /// <summary>
     /// Holds <see cref="EventHandler"/> attributes to configure the mappings between event names and
@@ -60,7 +60,7 @@ namespace Microsoft.AspNetCore.Components
     [EventHandler("oncut", typeof(UIClipboardEventArgs))]
     [EventHandler("onpaste", typeof(UIClipboardEventArgs))]
 
-    // Touch events 
+    // Touch events
     [EventHandler("ontouchcancel", typeof(UITouchEventArgs))]
     [EventHandler("ontouchend", typeof(UITouchEventArgs))]
     [EventHandler("ontouchmove", typeof(UITouchEventArgs))]
